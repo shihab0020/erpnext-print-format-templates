@@ -1,0 +1,403 @@
+{%- macro fmt(v) -%}{{ frappe.format_value(v | float, {"fieldtype": "Currency"}, doc=doc, currency=doc.currency) }}{%- endmacro -%}
+{%- macro fdate(d) -%}{{ frappe.format_date(d, 'dd MMM yyyy') }}{%- endmacro -%}
+
+{%- set _cust_name = doc.party_name if doc.quotation_to == "Customer" else None -%}
+{%- set cust_doc = frappe.get_doc("Customer", _cust_name) if _cust_name else None -%}
+{%- set customer_vat = (cust_doc.custom_vat_registration_number if cust_doc else "") or "" -%}
+{%- set customer_name_ar = (cust_doc.customer_name_in_arabic if cust_doc else "") or "" -%}
+
+{# Sales Orders linked to this Quotation #}
+{%- set so_list = [] -%}
+{%- set so_rows = frappe.db.sql("SELECT DISTINCT soi.parent FROM `tabSales Order Item` soi WHERE soi.prevdoc_docname = %s", (doc.name,)) -%}
+{%- for so in so_rows -%}{%- if so[0] and so[0] not in so_list -%}{%- set _ = so_list.append(so[0]) -%}{%- endif -%}{%- endfor -%}
+
+{%- set _qr_text = "Company | Quotation: " + (doc.name or "") + " | Total: SAR " + ("%.2f" | format((doc.grand_total or 0) | float)) -%}
+
+<head>
+<meta charset="UTF-8">
+<style>
+/* Saudi Riyal symbol font — embedded as base64 to avoid Content-Type issues in Chrome PDF */
+@font-face {
+  font-family: 'SaudiRiyal';
+  src: url('data:font/woff2;base64,d09GMgABAAAAAAL4AA0AAAAAB2wAAAKjAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0ZGVE0cGh4GYACCXhEICoF0gWELDgABNgIkAxgEIAWFLAdFG2MGERWc38h+HsbOiCl5Nj4EoyffxZWpjtZ+BF92z3+fmb37AEYAEQpfYOViJMdCIf77T6c+i+iBZC3snGA/Y17uMju8JhWrQXNFJX7imvqJDVSNb/JEuTVtFik0jQYf7nxgVRqlRRvCwHxgtGHbiDKyXm5kcj0JAV/fYRx8883du/cO1ERjJCFUhAIJOZ+Jiyqkm9JbuABGxy96RzWunahr4gjxk/zm/z8jMrIgwNxWIL+4pQALZIGWCkNQXVVJEtr+5P9/B9WfM/9/26QiC9UBhEyURAYiIQEAggL6bIj/qwNKUBMVTMZSQAEIhJByzjX6B5i6PW68s6nVt9zTIubF2Tkxn+vyva92qJ6Aht50ej5YWv3AI03gxTfcECdPRsR8qwHg/kOuvd8pdRxu0tF8YfUPPZa/1bUPOiZjzNwnPmkXLZY0eOTxrGLnO8aYn3rs/6uPg9aW/dOls7qP7zNUgY1zvvr1jsMBAkGLB+a9tLzOkF+r1ii88r2Q389QVQLhZeYU5yZqnV8OZQGIuUBCcc6rAqVREkgAAKjvcwHobIEAoYZbBUiqeFGArIbPBCjU8I8AFTWirQClGjFGgGpqxzYBqmsez3BmUVTDPKjE0NhHTGp7UMwa+4EF+gcqWFQFS7SLWE3LmPH46vrEUXy1ZTFYXMxKo0cEZoYrkESCJLTuLo7plXKF0eDE0gxMsw/pohQe+spvWjU9CTbjBSUJJZqT5IrRsE7T9wCzkUmipLorvREOs1dOSaneyzdxYJZUbsKRHrS1tb6t9Wn1PKnesFgSGJPGAMlvcFMzjmj+8vrgLHYD40jCiMmlhJUlI9/NRN6YnZh0IpdlNFCN18gTmV0sfxxxCCDxbymJJEWWoyjX83dbmMpeURqGkVVWoWEAAA==') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  font-family: 'SaudiRiyal', 'Noto Sans', Arial, 'Liberation Sans', sans-serif;
+  font-size: 10.5pt;
+  color: #2c3e50;
+  background: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* margin-left/right here are read by Frappe as PDF page margins */
+.print-format { margin-top: 1mm !important; margin-left: 2mm !important; margin-right: 2mm !important; padding: 0 !important; }
+body { margin: 0 !important; padding: 0 !important; }
+thead { display: table-header-group; }
+.amt { white-space: nowrap; font-family: 'SaudiRiyal', Arial, sans-serif; }
+
+.lbl { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.8px; color: #90a4ae; }
+
+.badge {
+  display: inline-block; padding: 2px 9px; border-radius: 20px;
+  font-size: 6.5pt; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px;
+}
+.badge-ordered { background: #E8F5E9; color: #2E7D32; }
+.badge-open    { background: #E3F2FD; color: #1565C0; }
+.badge-expired { background: #FFF3E0; color: #E65100; }
+.badge-lost    { background: #FFEBEE; color: #C62828; }
+
+.sec-title {
+  font-size: 7pt; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: #5a4fcf;
+  padding-bottom: 3px; border-bottom: 1.5px solid #667eea; margin-bottom: 5px;
+}
+
+table.inv-tbl {
+  width: 100%; border-collapse: collapse; font-size: 10pt;
+  margin-bottom: 5px; table-layout: fixed;
+}
+table.inv-tbl thead { display: table-header-group; }
+table.inv-tbl thead th {
+  background: linear-gradient(135deg, #e8ecfd 0%, #edddf7 100%);
+  color: #3d2fa0;
+  padding: 5px 5px; font-size: 8pt; font-weight: 600;
+  text-transform: uppercase; text-align: left; letter-spacing: 0.2px;
+  border-bottom: 1px solid rgba(102,126,234,0.25);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+table.inv-tbl thead th.r { text-align: right; }
+table.inv-tbl thead th.c { text-align: center; }
+table.inv-tbl tbody tr { border-bottom: 1px solid #e8e4f5; page-break-inside: avoid; }
+table.inv-tbl tbody tr:nth-child(even) { background: #fafaff; }
+table.inv-tbl tbody td { padding: 4px 5px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+table.inv-tbl tbody td.r { text-align: right; }
+table.inv-tbl tbody td.c { text-align: center; white-space: nowrap; }
+
+table.tot-box { width: 100%; border-collapse: collapse; border: 1px solid #e4e0f5; margin-bottom: 5px; font-size: 10.5pt; }
+table.tot-box tr { border-bottom: 1px solid #e4e0f5; }
+table.tot-box tr:last-child { border-bottom: none; }
+table.tot-box td { padding: 5px 10px; }
+table.tot-box td.tl { color: #546e7a; text-align: left; white-space: nowrap; }
+table.tot-box td.tr { text-align: right; font-weight: 500; }
+table.tot-box tr.grand { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+table.tot-box tr.grand td { font-size: 12pt; font-weight: 700; padding: 7px 10px; color: #3d2fa0; background: linear-gradient(135deg, #dde3fc 0%, #e8d5f5 100%); -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font-size: 9.5pt; }
+
+.bank-wrap { border: 1px solid #e4e0f5; overflow: hidden; margin-bottom: 5px; page-break-inside: avoid; }
+.bank-hd { background: #f0eeff; color: #5a4fcf; padding: 3px 10px; font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #ddd8f8; }
+.bank-bd { padding: 6px 10px; font-size: 9.5pt; color: #546e7a; line-height: 1.75; }
+
+.item-desc { font-size: 9pt; color: #607d8b; margin-top: 2px; line-height: 1.45; }
+.item-desc p { margin: 0 0 2px 0; }
+.item-desc ul, .item-desc ol { margin: 0; padding-left: 14px; }
+.item-desc li { margin-bottom: 1px; }
+
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wrapper { padding: 1mm 0 5mm !important; }
+  .footer-bar { display: none; }
+}
+
+/* Single-line footer in the bottom page margin */
+@page {
+  @bottom-center {
+    content: "Company Name English  \2022  Ph: 123456789  \2022  company.com  \2022  mail@server.com  |  Thank You For Your Business  |  شكراً لتعاملكم معنا  \2022  Tel: 123 456 789 / 123 456 789  |  Page " counter(page) " / " counter(pages);
+    font-size: 5pt;
+    color: #90a4ae;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #e4e0f5;
+    padding-top: 3px;
+    text-align: center;
+    white-space: nowrap;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ═══ REPEATING HEADER ═══════════════════════════════════════ -->
+<div id="header-html" class="hidden-pdf">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="width:12%;vertical-align:middle;padding:0 6px 0 0;">
+        <img src="/files/Company300Logo.jpg" alt="Company" style="width:68px;height:auto;max-width:100%;">
+      </td>
+      <td style="width:51%;vertical-align:top;padding:0 6px;">
+        <div style="font-size:11pt;font-weight:700;color:#1b078d;line-height:1.1;">Company Name English</div>
+        <div style="font-size:9pt;color:#607d8b;line-height:1.5;margin-top:2px;">مؤسسة ا</div>
+        <div style="font-size:6.5pt;color:#607d8b;line-height:1.5;margin-top:2px;">
+          Address Line 1 Str.(6904), Address Line2. JED KSA<br>
+          P.O 23216 &bull; C.R 123456789 &bull; Ph: 123456789 &bull; mail@server.com<br>
+          <b>VAT: 123456789</b>
+        </div>
+      </td>
+      <td style="width:37%;vertical-align:top;text-align:right;padding:0 0 0 6px;">
+        <div style="font-size:8pt;font-weight:700;color:#667eea;line-height:1.2;">Quotation / عرض سعر</div>
+        <div style="font-size:11pt;font-weight:700;color:#2c3e50;margin-top:1px;letter-spacing:0.3px;">{{ doc.name }}</div>
+        <div style="font-size:7pt;color:#607d8b;margin-top:1px;">{{ fdate(doc.transaction_date) }}</div>
+        {% if doc.status == "Ordered" %}<span class="badge badge-ordered">ORDERED · طُلب</span>
+        {% elif doc.status == "Open" %}<span class="badge badge-open">OPEN · مفتوح</span>
+        {% elif doc.status == "Expired" %}<span class="badge badge-expired">EXPIRED · منتهي</span>
+        {% elif doc.status in ["Lost", "Cancelled"] %}<span class="badge badge-lost">{{ doc.status | upper }}</span>
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+</div>
+<!-- /header -->
+
+<div style="border-top:1px solid rgba(102,126,234,0.35);margin-bottom:6px;"></div>
+
+<!-- ═══ CUSTOMER + QR + REFS ═══════════════════════════════════ -->
+<table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+  <tr>
+    <td style="width:42%;vertical-align:top;padding-right:6px;">
+      <div class="lbl" style="margin-bottom:2px;">Customer / العميل</div>
+      {% if doc.customer_name %}<div style="font-size:10.5pt;font-weight:700;margin-bottom:2px;line-height:1.2;color:#2c3e50;">{{ doc.customer_name }}</div>{% endif %}
+      {% if customer_name_ar %}<div style="font-size:9pt;color:#546e7a;line-height:1.3;">{{ customer_name_ar }}</div>{% endif %}
+      {% if doc.customer_address %}
+      {% set ca = frappe.get_doc('Address', doc.customer_address) %}
+      <div style="font-size:8pt;color:#546e7a;line-height:1.55;margin-top:3px;">
+        {% if ca.address_line1 %}<div>{{ ca.address_line1 }}</div>{% endif %}
+        {% if ca.address_line2 %}<div>{{ ca.address_line2 }}</div>{% endif %}
+        {% if ca.city %}<div>{{ ca.city }}{% if ca.pincode %} {{ ca.pincode }}{% endif %}</div>{% endif %}
+        {% if ca.phone %}<div>Ph: {{ ca.phone }}</div>{% endif %}
+      </div>
+      {% endif %}
+      {% if customer_vat %}<div style="font-size:8pt;color:#546e7a;margin-top:2px;">VAT: {{ customer_vat }}</div>{% endif %}
+    </td>
+
+    <td style="width:16%;vertical-align:middle;text-align:center;padding:0 4px;">
+      <div style="display:inline-block;border:2px solid #c5bff5;border-radius:8px;padding:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+        <div style="background:#fff;border-radius:4px;padding:0;line-height:0;">
+          <img alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data={{ _qr_text | urlencode }}&bgcolor=FFFFFF&color=000000&margin=0" width="90" height="90" style="display:block;">
+        </div>
+      </div>
+      <div class="lbl" style="margin-top:4px;">Quotation QR</div>
+    </td>
+
+    <td style="width:42%;vertical-align:top;padding-left:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:8pt;">
+        {%- set _branch = doc.custom_branch or doc.branch or "" -%}
+        {% if _branch %}<tr>
+          <td style="color:#90a4ae;font-size:7pt;padding:2px 0;white-space:nowrap;">Branch / الفرع</td>
+          <td style="font-weight:600;padding:2px 0;text-align:right;">{{ _branch }}</td>
+        </tr>{% endif %}
+        {% if doc.valid_till %}<tr>
+          <td style="color:#90a4ae;font-size:7pt;padding:2px 0;white-space:nowrap;">Valid Till / صالح حتى</td>
+          <td style="font-weight:600;padding:2px 0;text-align:right;">{{ fdate(doc.valid_till) }}</td>
+        </tr>{% endif %}
+        {% if doc.payment_terms_template %}<tr>
+          <td style="color:#90a4ae;font-size:7pt;padding:2px 0;white-space:nowrap;">Payment Terms / شروط الدفع</td>
+          <td style="font-weight:600;padding:2px 0;text-align:right;">{{ doc.payment_terms_template }}</td>
+        </tr>{% endif %}
+        {% if doc.po_no %}<tr>
+          <td style="color:#90a4ae;font-size:7pt;padding:2px 0;white-space:nowrap;">Customer PO / أمر شراء العميل</td>
+          <td style="font-weight:600;padding:2px 0;text-align:right;">{{ doc.po_no }}</td>
+        </tr>{% endif %}
+        {% if doc.custom_reference_to_customer %}<tr>
+          <td style="color:#90a4ae;font-size:7pt;padding:2px 0;white-space:nowrap;">Reference / مرجع</td>
+          <td style="font-weight:600;padding:2px 0;text-align:right;">{{ doc.custom_reference_to_customer }}</td>
+        </tr>{% endif %}
+        {% if so_list %}<tr>
+          <td style="color:#90a4ae;font-size:7pt;padding:2px 0;white-space:nowrap;">Sales Order / أمر البيع</td>
+          <td style="font-weight:600;padding:2px 0;text-align:right;">{{ so_list | join(', ') }}</td>
+        </tr>{% endif %}
+      </table>
+    </td>
+  </tr>
+</table>
+<hr style="border:none;border-top:1px solid #e4e0f5;margin-bottom:4px;">
+
+{% if doc.custom_public_note %}
+<div style="font-size:9pt;color:#37474f;margin-bottom:4px;">{{ doc.custom_public_note }}</div>
+{% endif %}
+
+
+<!-- ═══ ITEMS TABLE ═════════════════════════════════════════════ -->
+<div class="sec-title">Items &amp; Services &nbsp;|&nbsp; البنود والخدمات</div>
+
+<table class="inv-tbl">
+  <colgroup>
+    <col style="width:30px">
+    <col>
+    <col style="width:32px">
+    <col style="width:30px">
+    <col style="width:70px">
+    <col style="width:36px">
+    <col style="width:70px">
+    <col style="width:80px">
+  </colgroup>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Item Description &nbsp;<span style="font-weight:400;opacity:.9;font-size:6.5pt;">وصف الصنف</span></th>
+      <th class="c">Qty<br><span style="font-weight:400;opacity:.9;font-size:6.5pt;">الكمية</span></th>
+      <th class="c">UOM</th>
+      <th class="r">U.P.(Net)<br><span style="font-weight:400;opacity:.9;font-size:6.5pt;">سعر صافي</span></th>
+      <th class="c">VAT%</th>
+      <th class="r">U.P.(Inc.)<br><span style="font-weight:400;opacity:.9;font-size:6.5pt;">سعر شامل</span></th>
+      <th class="r">Total(Inc.)<br><span style="font-weight:400;opacity:.9;font-size:6.5pt;">إجمالي شامل</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.items %}
+    {% set item_doc = frappe.get_doc("Item", row.item_code) %}
+    {%- if row.item_tax_template -%}
+      {%- set ttpl = frappe.get_doc('Item Tax Template', row.item_tax_template) -%}
+      {%- set row_vat = ttpl.taxes[0].tax_rate if ttpl.taxes else (doc.taxes[0].rate if doc.taxes else 0) -%}
+    {%- elif doc.item_tax_template -%}
+      {%- set ttpl = frappe.get_doc('Item Tax Template', doc.item_tax_template) -%}
+      {%- set row_vat = ttpl.taxes[0].tax_rate if ttpl.taxes else (doc.taxes[0].rate if doc.taxes else 0) -%}
+    {%- elif doc.taxes -%}
+      {%- set row_vat = doc.taxes[0].rate -%}
+    {%- else -%}
+      {%- set row_vat = 0 -%}
+    {%- endif -%}
+    {%- set vat_pct = (row_vat | int)|string + '%' if row_vat == (row_vat | int) else (row_vat)|string + '%' -%}
+    {%- set up_inc = row.rate * (1 + row_vat / 100) -%}
+    {%- set tot_inc = row.rate * row.qty * (1 + row_vat / 100) -%}
+    <tr>
+      <td style="color:#90a4ae;font-size:9pt;padding-top:4px;">{{ loop.index }}</td>
+      <td>
+        {%- set _img = item_doc.image -%}
+        <div style="overflow:hidden;">
+          {%- if _img -%}
+          <div style="float:left;width:42px;height:42px;overflow:hidden;border-radius:3px;border:1px solid #e4e0f5;margin-right:6px;margin-bottom:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+            <img src="{{ _img }}" style="width:42px !important;height:42px !important;max-width:none !important;object-fit:cover;display:block;">
+          </div>
+          {%- endif -%}
+          <div style="font-size:10pt;font-weight:700;color:#2c3e50;line-height:1.3;">
+            {%- if item_doc.brand -%}<span style="color:#607d8b;font-weight:500;">{{ item_doc.brand }}</span> &bull; {%- endif -%}{{ row.item_code }}
+          </div>
+          {%- if row.description -%}
+          <div class="item-desc">{{ row.description | safe }}</div>
+          {%- endif -%}
+          {%- if item_doc.custom_description_arabic and item_doc.custom_description_arabic.strip() -%}
+          <div style="font-size:9pt;color:#607d8b;direction:rtl;text-align:right;margin-top:2px;line-height:1.4;">{{ item_doc.custom_description_arabic }}</div>
+          {%- endif -%}
+        </div>
+      </td>
+      <td class="c" style="font-size:10pt;font-weight:600;">{{ "%.0f" | format(row.qty) if row.qty == row.qty|int else "%.2f" | format(row.qty) }}</td>
+      <td class="c" style="font-size:8.5pt;color:#546e7a;">{{ row.uom }}</td>
+      <td class="r"><span class="amt">{{ row.get_formatted("rate", doc) }}</span></td>
+      <td class="c">{{ vat_pct }}</td>
+      <td class="r"><span class="amt">{{ fmt(up_inc) }}</span></td>
+      <td class="r" style="font-weight:600;"><span class="amt">{{ fmt(tot_inc) }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div style="font-size:8pt;color:#90a4ae;text-align:right;margin-bottom:4px;padding-right:2px;">
+  Total Qty / إجمالي الكمية: <strong style="color:#546e7a;">{{ doc.total_qty | int }}</strong>
+</div>
+<hr style="border:none;border-top:1px solid #e4e0f5;margin-bottom:5px;">
+
+
+<!-- ═══ BANK LEFT | TOTALS RIGHT ════════════════════════════════ -->
+<div style="page-break-inside:avoid;">
+<table style="width:100%;border-collapse:collapse;">
+  <tr>
+    <td style="width:46%;vertical-align:top;padding-right:8px;">
+
+      {% if doc.terms %}
+      <div class="bank-wrap" style="margin-bottom:4px;">
+        <div class="bank-hd">Terms &amp; Conditions &nbsp;|&nbsp; الشروط والأحكام</div>
+        <div class="bank-bd">{{ doc.terms | striptags | replace("\n", " ") | trim }}</div>
+      </div>
+      {% endif %}
+
+      <div class="bank-wrap">
+        <div class="bank-hd">Payment / Bank Details &nbsp;|&nbsp; تفاصيل الدفع والحساب البنكي</div>
+        <div class="bank-bd">
+          {%- set _branch = doc.custom_branch or doc.branch or "" -%}
+          {%- if _branch == "RUH-OPERATION" -%}
+          <div>Saudi National Bank / البنك الأهلي السعودي</div>
+          <div>Acc No: <strong>123456789</strong></div>
+          <div>IBAN: <strong>SA41 1000 00123456789</strong></div>
+          {%- elif _branch == "Company-PROJECTS" -%}
+          <div>Saudi National Bank / البنك الأهلي السعودي</div>
+          <div>Acc No: <strong>123456789</strong></div>
+          <div>IBAN: <strong>SA06 1000 00123456789</strong></div>
+          {%- else -%}
+          <div>Saudi National Bank / البنك الأهلي السعودي</div>
+          <div>Acc No: <strong>123456789</strong></div>
+          <div>IBAN: <strong>SA89 1000 00123456789</strong></div>
+          {%- endif -%}
+        </div>
+      </div>
+
+    </td>
+
+    <td style="width:54%;vertical-align:top;">
+
+      <table class="tot-box">
+        <tr>
+          <td class="tl">Subtotal (excl. VAT) &nbsp;|&nbsp; إجمالي قبل الضريبة</td>
+          <td class="tr"><span class="amt">{{ doc.get_formatted("net_total") }}</span></td>
+        </tr>
+        {% for tax in doc.taxes %}
+        {% if not tax.included_in_print_rate and tax.tax_amount %}
+        <tr>
+          <td class="tl">VAT ({{ tax.rate | int }}%) &nbsp;|&nbsp; ضريبة القيمة المضافة</td>
+          <td class="tr"><span class="amt">{{ tax.get_formatted("tax_amount", doc) }}</span></td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        {% if doc.discount_amount %}
+        <tr>
+          <td class="tl">Discount &nbsp;|&nbsp; خصم</td>
+          <td class="tr"><span class="amt" style="color:#C62828;">&#8722;{{ doc.get_formatted("discount_amount") }}</span></td>
+        </tr>
+        {% endif %}
+        <tr class="grand">
+          <td class="tl">Grand Total &nbsp;|&nbsp; الإجمالي الكلي</td>
+          <td class="tr"><span class="amt">
+            {% if doc.rounded_total %}{{ doc.get_formatted("rounded_total") }}
+            {% else %}{{ doc.get_formatted("grand_total") }}{% endif %}
+          </span></td>
+        </tr>
+      </table>
+
+      {% if doc.in_words %}
+      <div style="background:linear-gradient(135deg,#dde3fc 0%,#e8d5f5 100%);color:#3d2fa0;padding:6px 10px;margin-top:5px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+        <div style="font-size:6.5pt;text-transform:uppercase;letter-spacing:1px;opacity:.65;margin-bottom:2px;">Amount in Words &nbsp;|&nbsp; المبلغ كتابةً</div>
+        <div style="font-size:9pt;font-weight:600;">{{ doc.in_words }}</div>
+      </div>
+      {% endif %}
+
+    </td>
+  </tr>
+</table>
+
+<!-- ═══ SIGNATURES ══════════════════════════════════════════════ -->
+<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:8.5pt;color:#607d8b;">
+  <tr>
+    <td style="width:48%;text-align:center;border:1px solid #e4e0f5;padding:26px 10px 6px 10px;">
+      Customer Signature &nbsp;|&nbsp; توقيع العميل
+    </td>
+    <td style="width:4%;"></td>
+    <td style="width:48%;text-align:center;border:1px solid #e4e0f5;padding:26px 10px 6px 10px;">
+      Salesman Signature &nbsp;|&nbsp; توقيع البائع
+    </td>
+  </tr>
+</table>
+
+</div><!-- /page-break-avoid -->
+
+
+<!-- ═══ SCREEN FOOTER (hidden in PDF — @page handles it) ════════ -->
+<div class="footer-bar" style="border-top:1px solid #e4e0f5;padding-top:4px;text-align:center;font-size:6.5pt;color:#90a4ae;">
+  <div style="line-height:1.7;">Thank You For Your Business &nbsp;|&nbsp; شكراً لتعاملكم معنا &nbsp;&bull;&nbsp; Questions? Call: 123 456 789 / 123 456 789</div>
+  <div style="line-height:1.7;">Company Name English &bull; Showroom - Address line1., Jeddah, KSA &bull; Ph: 123456789 &bull; www.company.com &bull; mail@server.com</div>
+</div>
+
+
+</body>
