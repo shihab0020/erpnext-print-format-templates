@@ -1,8 +1,7 @@
 {%- macro fmt(v) -%}{{ frappe.format_value(v | float, {"fieldtype": "Currency"}, doc=doc, currency=doc.currency) }}{%- endmacro -%}
 {%- macro fdate(d) -%}{{ frappe.format_date(d, 'dd MMM yyyy') }}{%- endmacro -%}
 
-{%- set _cust_name = doc.party_name if doc.quotation_to == "Customer" else None -%}
-{%- set cust_doc = frappe.get_doc("Customer", _cust_name) if _cust_name else None -%}
+{%- set cust_doc = frappe.get_doc("Customer", doc.customer) if doc.customer else None -%}
 {%- set customer_vat = (cust_doc.custom_vat_registration_number if cust_doc else "") or "" -%}
 {%- set customer_name_ar = (cust_doc.customer_name_in_arabic if cust_doc else "") or "" -%}
 
@@ -11,7 +10,7 @@
 {%- set so_rows = frappe.db.sql("SELECT DISTINCT soi.parent FROM `tabSales Order Item` soi WHERE soi.prevdoc_docname = %s", (doc.name,)) -%}
 {%- for so in so_rows -%}{%- if so[0] and so[0] not in so_list -%}{%- set _ = so_list.append(so[0]) -%}{%- endif -%}{%- endfor -%}
 
-{%- set _qr_text = "Company | Quotation: " + (doc.name or "") + " | Total: SAR " + ("%.2f" | format((doc.grand_total or 0) | float)) -%}
+{%- set _qr_text = "DLITS | Quotation: " + (doc.name or "") + " | Total: SAR " + ("%.2f" | format((doc.grand_total or 0) | float)) -%}
 
 <head>
 <meta charset="UTF-8">
@@ -107,7 +106,7 @@ table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font
 /* Single-line footer in the bottom page margin */
 @page {
   @bottom-center {
-    content: "Company Name English  \2022  Ph: 123456789  \2022  company.com  \2022  mail@server.com  |  Thank You For Your Business  |  شكراً لتعاملكم معنا  \2022  Tel: 123 456 789 / 123 456 789  |  Page " counter(page) " / " counter(pages);
+    content: "BRAND Company Name AAA  \2022  Ph: 123456789  \2022  dlits-sa.com  \2022  email@server.com  |  Thank You For Your Business  |  شكراً لتعاملكم معنا  \2022  Tel: 055 660 1442 / 050 904 5807  |  Page " counter(page) " / " counter(pages);
     font-size: 5pt;
     color: #90a4ae;
     font-family: Arial, sans-serif;
@@ -127,14 +126,14 @@ table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font
   <table style="width:100%;border-collapse:collapse;">
     <tr>
       <td style="width:12%;vertical-align:middle;padding:0 6px 0 0;">
-        <img src="/files/Company300Logo.jpg" alt="Company" style="width:68px;height:auto;max-width:100%;">
+        <img src="/files/Dlits300Logo.jpg" alt="DLITS" style="width:68px;height:auto;max-width:100%;">
       </td>
       <td style="width:51%;vertical-align:top;padding:0 6px;">
-        <div style="font-size:11pt;font-weight:700;color:#1b078d;line-height:1.1;">Company Name English</div>
-        <div style="font-size:9pt;color:#607d8b;line-height:1.5;margin-top:2px;">مؤسسة ا</div>
+        <div style="font-size:11pt;font-weight:700;color:#1b078d;line-height:1.1;">Brand (Company Name AAA)</div>
+        <div style="font-size:9pt;color:#607d8b;line-height:1.5;margin-top:2px;">مؤسسة XXX التجارية</div>
         <div style="font-size:6.5pt;color:#607d8b;line-height:1.5;margin-top:2px;">
-          Address Line 1 Str.(6904), Address Line2. JED KSA<br>
-          P.O 23216 &bull; C.R 123456789 &bull; Ph: 123456789 &bull; mail@server.com<br>
+          Address Line 1, Address Line 2<br>
+          P.O 23216 &bull; C.R 123456789 &bull; Ph: 123456789 &bull; email@server.com<br>
           <b>VAT: 123456789</b>
         </div>
       </td>
@@ -226,7 +225,7 @@ table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font
 
 <table class="inv-tbl">
   <colgroup>
-    <col style="width:30px">
+    <col style="width:34px">
     <col>
     <col style="width:32px">
     <col style="width:30px">
@@ -267,23 +266,15 @@ table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font
     <tr>
       <td style="color:#90a4ae;font-size:9pt;padding-top:4px;">{{ loop.index }}</td>
       <td>
-        {%- set _img = item_doc.image -%}
-        <div style="overflow:hidden;">
-          {%- if _img -%}
-          <div style="float:left;width:42px;height:42px;overflow:hidden;border-radius:3px;border:1px solid #e4e0f5;margin-right:6px;margin-bottom:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-            <img src="{{ _img }}" style="width:42px !important;height:42px !important;max-width:none !important;object-fit:cover;display:block;">
-          </div>
-          {%- endif -%}
-          <div style="font-size:10pt;font-weight:700;color:#2c3e50;line-height:1.3;">
-            {%- if item_doc.brand -%}<span style="color:#607d8b;font-weight:500;">{{ item_doc.brand }}</span> &bull; {%- endif -%}{{ row.item_code }}
-          </div>
-          {%- if row.description -%}
-          <div class="item-desc">{{ row.description | safe }}</div>
-          {%- endif -%}
-          {%- if item_doc.custom_description_arabic and item_doc.custom_description_arabic.strip() -%}
-          <div style="font-size:9pt;color:#607d8b;direction:rtl;text-align:right;margin-top:2px;line-height:1.4;">{{ item_doc.custom_description_arabic }}</div>
-          {%- endif -%}
+        <div style="font-size:10pt;font-weight:700;color:#2c3e50;line-height:1.3;">
+          {%- if item_doc.brand -%}<span style="color:#607d8b;font-weight:500;">{{ item_doc.brand }}</span> &bull; {%- endif -%}{{ row.item_code }}
         </div>
+        {%- if row.description -%}
+        <div class="item-desc">{{ row.description | safe }}</div>
+        {%- endif -%}
+        {%- if item_doc.custom_description_arabic and item_doc.custom_description_arabic.strip() -%}
+        <div style="font-size:9pt;color:#607d8b;direction:rtl;text-align:right;margin-top:2px;line-height:1.4;">{{ item_doc.custom_description_arabic }}</div>
+        {%- endif -%}
       </td>
       <td class="c" style="font-size:10pt;font-weight:600;">{{ "%.0f" | format(row.qty) if row.qty == row.qty|int else "%.2f" | format(row.qty) }}</td>
       <td class="c" style="font-size:8.5pt;color:#546e7a;">{{ row.uom }}</td>
@@ -320,16 +311,16 @@ table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font
           {%- set _branch = doc.custom_branch or doc.branch or "" -%}
           {%- if _branch == "RUH-OPERATION" -%}
           <div>Saudi National Bank / البنك الأهلي السعودي</div>
-          <div>Acc No: <strong>123456789</strong></div>
-          <div>IBAN: <strong>SA41 1000 00123456789</strong></div>
-          {%- elif _branch == "Company-PROJECTS" -%}
+          <div>Acc No: <strong>123 123 123 456</strong></div>
+          <div>IBAN: <strong>SA41 1000 00123 123 123 456</strong></div>
+          {%- elif _branch == "DLITS-PROJECTS" -%}
           <div>Saudi National Bank / البنك الأهلي السعودي</div>
-          <div>Acc No: <strong>123456789</strong></div>
-          <div>IBAN: <strong>SA06 1000 00123456789</strong></div>
+          <div>Acc No: <strong>123 123 123 456</strong></div>
+          <div>IBAN: <strong>SA06 1000 00123 123 123 456</strong></div>
           {%- else -%}
           <div>Saudi National Bank / البنك الأهلي السعودي</div>
-          <div>Acc No: <strong>123456789</strong></div>
-          <div>IBAN: <strong>SA89 1000 00123456789</strong></div>
+          <div>Acc No: <strong>123 123 123 456</strong></div>
+          <div>IBAN: <strong>SA89 1000 00123 123 123 456</strong></div>
           {%- endif -%}
         </div>
       </div>
@@ -395,8 +386,8 @@ table.tot-box tr.grand td.tl { color: rgba(61,47,160,.6); font-weight: 400; font
 
 <!-- ═══ SCREEN FOOTER (hidden in PDF — @page handles it) ════════ -->
 <div class="footer-bar" style="border-top:1px solid #e4e0f5;padding-top:4px;text-align:center;font-size:6.5pt;color:#90a4ae;">
-  <div style="line-height:1.7;">Thank You For Your Business &nbsp;|&nbsp; شكراً لتعاملكم معنا &nbsp;&bull;&nbsp; Questions? Call: 123 456 789 / 123 456 789</div>
-  <div style="line-height:1.7;">Company Name English &bull; Showroom - Address line1., Jeddah, KSA &bull; Ph: 123456789 &bull; www.company.com &bull; mail@server.com</div>
+  <div style="line-height:1.7;">Thank You For Your Business &nbsp;|&nbsp; شكراً لتعاملكم معنا &nbsp;&bull;&nbsp; Questions? Call: 050 050 050 050 / 050 050 050</div>
+  <div style="line-height:1.7;">BRAND Company Name AAA &bull; Showroom - Address Line  St., Jeddah, KSA &bull; Ph: 123456789 &bull; www.server.com &bull; email@server.com</div>
 </div>
 
 
